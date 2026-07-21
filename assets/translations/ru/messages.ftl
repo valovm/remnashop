@@ -1102,6 +1102,7 @@ msg-gateways-field =
         [test_password1] тестового пароля #1 (из «Технических настроек» магазина)
         [test_password2] тестового пароля #2 (из «Технических настроек» магазина)
         [vat] ставки НДС для чека — впишите одно из: <code>none</code> (без НДС), <code>vat0</code>, <code>vat5</code>, <code>vat7</code>, <code>vat10</code>, <code>vat20</code>
+        [payment_type] метода оплаты (код платежной системы UnitPay) — например <code>card</code>, <code>applepay</code>, <code>googlepay</code>, <code>sbp</code>, <code>qiwi</code>. По умолчанию <code>card</code>
        *[other] { $field }
     }.
 
