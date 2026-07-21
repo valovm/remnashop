@@ -149,6 +149,13 @@ class RoboKassaGatewaySettingsDto(GatewaySettingsDto):
     test_mode: bool = False
     test_password1: Optional[SecretStr] = None
     test_password2: Optional[SecretStr] = None
+    # Fiscal receipt (54-ФЗ): when `fiscal_tax` is set, a Receipt with the plan as a
+    # line item (nomenclature) is attached, so Robokassa registers an itemised sale
+    # instead of a free-form one. Values follow Robokassa's receipt spec.
+    fiscal_tax: Optional[str] = None  # none / vat0 / vat10 / vat20 / vat110 / vat120
+    fiscal_sno: Optional[str] = None  # osn / usn_income / usn_income_outcome / esn / patent
+    fiscal_payment_method: Optional[str] = None  # e.g. full_payment / full_prepayment
+    fiscal_payment_object: Optional[str] = None  # e.g. service / commodity
 
     @property
     def is_configured(self) -> bool:

@@ -1,9 +1,10 @@
 import hashlib
+import json
 import uuid
 from decimal import Decimal
 from hmac import compare_digest
-from typing import Any, Final, Union, cast
-from urllib.parse import parse_qs, urlencode
+from typing import Any, Final, Optional, Union, cast
+from urllib.parse import parse_qs, quote, urlencode
 from uuid import UUID
 
 from aiogram import Bot
@@ -40,13 +41,23 @@ class RobokassaGateway(BasePaymentGateway):
         out_sum = self._format_amount(amount)
         shp_params = {self.SHP_ORDER_ID: str(order_id)}
 
-        signature = self._sign_payment(out_sum, inv_id, shp_params)
+        # A fiscal receipt (54-ФЗ) with the plan as a line item is attached only when
+        # `fiscal_tax` is configured; otherwise Robokassa registers a free-form sale
+        # ("свободная продажа") with no itemised nomenclature.
+        receipt_json = (
+            self._build_receipt(amount, details)
+            if self._settings().fiscal_tax is not None
+            else None
+        )
+
+        signature = self._sign_payment(out_sum, inv_id, shp_params, receipt_json)
         payment_url = self._build_payment_url(
             out_sum=out_sum,
             inv_id=inv_id,
             description=details[:100],
             signature=signature,
             shp_params=shp_params,
+            receipt_json=receipt_json,
         )
 
         return PaymentResultDto(id=order_id, url=payment_url)
@@ -108,17 +119,19 @@ class RobokassaGateway(BasePaymentGateway):
         out_sum: str,
         inv_id: int,
         shp_params: dict[str, str],
+        receipt_json: Optional[str] = None,
     ) -> str:
         merchant_login = self._settings().merchant_login
         if not merchant_login:
             raise ValueError("merchant_login is required")
 
-        parts: list[str] = [
-            merchant_login,
-            out_sum,
-            str(inv_id),
-            self._password(first=True),
-        ]
+        # Signature order: MerchantLogin:OutSum:InvId[:Receipt]:Password1:Shp_...
+        # Robokassa signs the RAW (unencoded) Receipt JSON; the URL carries the same
+        # JSON rawurlencoded. Signing the encoded form fails with "Error code 29".
+        parts: list[str] = [merchant_login, out_sum, str(inv_id)]
+        if receipt_json is not None:
+            parts.append(receipt_json)
+        parts.append(self._password(first=True))
         parts.extend(f"{k}={shp_params[k]}" for k in sorted(shp_params))
         return self._hash(":".join(parts))
 
@@ -171,6 +184,7 @@ class RobokassaGateway(BasePaymentGateway):
         description: str,
         signature: str,
         shp_params: dict[str, str],
+        receipt_json: Optional[str] = None,
     ) -> str:
         params: dict[str, Any] = {
             "MerchantLogin": self._settings().merchant_login,
@@ -178,14 +192,43 @@ class RobokassaGateway(BasePaymentGateway):
             "InvId": inv_id,
             "Description": description,
             "SignatureValue": signature,
+            # Tell Robokassa the Receipt bytes are UTF-8 (Cyrillic + ₽ in the item name);
+            # otherwise it may decode as windows-1251 and mangle the nomenclature.
             "Culture": "ru",
             "Encoding": "utf-8",
             **shp_params,
         }
+        if receipt_json is not None:
+            params["Receipt"] = receipt_json
         if self._is_test():
             params["IsTest"] = 1
 
-        return f"{self.PAYMENT_URL}?{urlencode(params)}"
+        # quote_via=quote (rawurlencode, spaces -> %20) instead of the default quote_plus
+        # (spaces -> +): Robokassa rawurldecodes Receipt, so "+" would corrupt the JSON
+        # and break the signature match.
+        return f"{self.PAYMENT_URL}?{urlencode(params, quote_via=quote)}"
+
+    def _build_receipt(self, amount: Decimal, details: str) -> str:
+        # Robokassa Receipt: an itemised nomenclature line for the plan, so the fiscal
+        # receipt is a proper sale of goods/services rather than a free-form one.
+        settings = self._settings()
+        item: dict[str, Any] = {
+            "name": details[:128],
+            "quantity": 1,
+            "sum": float(amount.quantize(Decimal("0.01"))),
+            "tax": settings.fiscal_tax,
+        }
+        if settings.fiscal_payment_method is not None:
+            item["payment_method"] = settings.fiscal_payment_method
+        if settings.fiscal_payment_object is not None:
+            item["payment_object"] = settings.fiscal_payment_object
+
+        receipt: dict[str, Any] = {"items": [item]}
+        if settings.fiscal_sno is not None:
+            receipt["sno"] = settings.fiscal_sno
+
+        # ensure_ascii=False keeps Cyrillic readable; the URL layer rawurlencodes it.
+        return json.dumps(receipt, ensure_ascii=False)
 
     @staticmethod
     def _format_amount(amount: Decimal) -> str:

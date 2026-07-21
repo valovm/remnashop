@@ -1101,6 +1101,10 @@ msg-gateways-field =
         [secret_key] секретного ключа
         [test_password1] тестового пароля #1 (из «Технических настроек» магазина)
         [test_password2] тестового пароля #2 (из «Технических настроек» магазина)
+        [fiscal_tax] ставки НДС для чека Robokassa — впишите одно из: <code>none</code> (без НДС), <code>vat0</code>, <code>vat10</code>, <code>vat20</code>, <code>vat110</code>, <code>vat120</code>. Задаёт формирование чека с номенклатурой (иначе — свободная продажа)
+        [fiscal_sno] системы налогообложения — например <code>osn</code>, <code>usn_income</code>, <code>usn_income_outcome</code>, <code>esn</code>, <code>patent</code>
+        [fiscal_payment_method] признака способа расчёта — например <code>full_payment</code>, <code>full_prepayment</code>
+        [fiscal_payment_object] признака предмета расчёта — например <code>service</code>, <code>commodity</code>
         [vat] ставки НДС для чека — впишите одно из: <code>none</code> (без чека, e-mail не запрашивается), <code>vat0</code>, <code>vat5</code>, <code>vat7</code>, <code>vat10</code>, <code>vat20</code>
         [payment_type] метода оплаты (код платежной системы UnitPay) — например <code>card</code>, <code>applepay</code>, <code>googlepay</code>, <code>sbp</code>, <code>qiwi</code>. По умолчанию <code>card</code>
        *[other] { $field }
